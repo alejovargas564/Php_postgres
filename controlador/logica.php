@@ -1,57 +1,104 @@
 <?php
+// Reportar errores para debug (puedes quitar esto después)
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
 require_once __DIR__ . '/../vendor/autoload.php';
 
 $mensaje = "";
 $statusPg = false;
 $statusMg = false;
 
-// 1. Conexión MongoDB (dentro de try/catch para que no mate el script)
-try {
-    $mongoUri = getenv('MONGODB_URI'); // Verifica que en Render se llame igual
-    if (!$mongoUri) throw new Exception("Falta MONGODB_URI");
-
-    $mongoClient = new MongoDB\Client($mongoUri);
-    $mongoCollection = $mongoClient->selectDatabase("estudiantes_db")->selectCollection("estudiantes");
-} catch (Exception $e) {
-    $errorMg = $e->getMessage();
-}
-
-// 2. Conexión PostgreSQL (Render inyecta DATABASE_URL automáticamente)
+// --- 1. CONEXIÓN POSTGRESQL ---
 try {
     $pgUri = getenv('DATABASE_URL');
+    if (!$pgUri) {
+        throw new Exception("La variable DATABASE_URL no existe en Render.");
+    }
     $pdo = new PDO($pgUri);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 } catch (Exception $e) {
-    $errorPg = $e->getMessage();
+    $mensaje .= "❌ Error Conexión PG: " . $e->getMessage() . "<br>";
 }
 
-// 3. Procesar Formulario
+// --- 2. CONEXIÓN MONGODB ---
+try {
+    $mongoUri = getenv('MONGODB_URI');
+    if (!$mongoUri) {
+        throw new Exception("La variable MONGODB_URI no existe en Render.");
+    }
+    $mongoClient = new MongoDB\Client($mongoUri);
+    // Verificar conexión real
+    $mongoClient->listDatabases(); 
+    $mongoCollection = $mongoClient->selectDatabase("estudiantes_db")->selectCollection("estudiantes");
+} catch (Exception $e) {
+    $mensaje .= "❌ Error Conexión MG: " . $e->getMessage() . "<br>";
+}
+
+// --- 3. PROCESAR FORMULARIO ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = $_POST['nom'] ?? '';
     $telefono = $_POST['tel'] ?? '';
     $detalles = $_POST['det'] ?? '';
 
-    // Guardar en Postgres
-    try {
-        if (isset($pdo)) {
+    // A. Guardar en Postgres
+    if (isset($pdo)) {
+        try {
             $stmt = $pdo->prepare("INSERT INTO sugerencias (nombre, telefono, detalles) VALUES (?, ?, ?)");
             $stmt->execute([$nombre, $telefono, $detalles]);
             $statusPg = true;
+        } catch (Exception $e) {
+            $mensaje .= "❌ Error al Insertar PG: " . $e->getMessage() . "<br>";
         }
-    } catch (Exception $e) { $mensaje .= "Error PG: " . $e->getMessage(); }
+    }
 
-    // Guardar en Mongo
-    try {
-        if (isset($mongoCollection)) {
-            $mongoCollection->insertOne(['nombre' => $nombre, 'tel' => $telefono, 'det' => $detalles]);
+    // B. Guardar en Mongo
+    if (isset($mongoCollection)) {
+        try {
+            $mongoCollection->insertOne([
+                'nombre' => $nombre, 
+                'tel' => $telefono, 
+                'det' => $detalles,
+                'fecha' => date("Y-m-d H:i:s")
+            ]);
             $statusMg = true;
+        } catch (Exception $e) {
+            $mensaje .= "❌ Error al Insertar MG: " . $e->getMessage() . "<br>";
         }
-    } catch (Exception $e) { $mensaje .= " Error MG: " . $e->getMessage(); }
+    }
 
-    // Mensaje de éxito dual
-    if ($statusPg && $statusMg) $mensaje = "✅ Guardado en ambos soportes.";
-    else $mensaje = "⚠ Guardado parcial. PG: " . ($statusPg?'OK':'Fail') . " | MG: " . ($statusMg?'OK':'Fail');
+    // --- 4. RESULTADO FINAL ---
+    if ($statusPg && $statusMg) {
+        $resultadoFinal = "✅ ¡ÉXITO! Guardado en ambos soportes correctamente.";
+    } else {
+        $resultadoFinal = "⚠ GUARDADO PARCIAL:<br>";
+        $resultadoFinal .= "PostgreSQL: " . ($statusPg ? "✅ OK" : "❌ FALLÓ") . "<br>";
+        $resultadoFinal .= "MongoDB: " . ($statusMg ? "✅ OK" : "❌ FALLÓ") . "<br>";
+    }
+} else {
+    $resultadoFinal = "No se recibieron datos del formulario.";
 }
 
-// Mostrar resultado simple para evitar pantalla blanca
-echo "<h1>$mensaje</h1><a href='../index.html'>Volver</a>";
+?>
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Resultado del Registro</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="container mt-5">
+    <div class="card shadow">
+        <div class="card-body text-center">
+            <h2 class="card-title"><?php echo $resultadoFinal; ?></h2>
+            <div class="alert alert-light text-start border mt-4">
+                <strong>Detalle de Errores (si los hay):</strong><br>
+                <?php echo $mensaje ?: "Ninguno. Todo operó según las conexiones disponibles."; ?>
+            </div>
+            <hr>
+            <a href="../index.html" class="btn btn-primary">Volver al Formulario</a>
+        </div>
+    </div>
+</body>
+</html>
