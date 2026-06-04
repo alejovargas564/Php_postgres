@@ -23,7 +23,7 @@ try {
     $pdo->exec("ALTER TABLE aprendices ADD COLUMN IF NOT EXISTS mongo_id VARCHAR(60) DEFAULT NULL");
 
     // ── MongoDB Atlas ─────────────────────────────────────────
-    $mongo_uri = getenv('MONGO_URI');
+    $mongo_uri = getenv('MONGO_URI') ?: $_ENV['MONGO_URI'] ?? $_SERVER['MONGO_URI'] ?? '';
     if (!$mongo_uri) {
     die("ERROR: MONGO_URI está vacío");
 }
