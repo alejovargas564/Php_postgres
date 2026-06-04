@@ -1,28 +1,57 @@
 <?php
 require_once __DIR__ . '/../vendor/autoload.php';
 
-// Cargar la URI desde la variable de entorno de Render
-$mongoUri = getenv('MONGODB_URI');
+$mensaje = "";
+$statusPg = false;
+$statusMg = false;
 
+// 1. Conexión MongoDB (dentro de try/catch para que no mate el script)
 try {
-    // Si no encuentra la variable de entorno, fallará con un mensaje claro
-    if (!$mongoUri) {
-        throw new Exception("La variable MONGODB_URI no está configurada en el servidor.");
-    }
+    $mongoUri = getenv('MONGODB_URI'); // Verifica que en Render se llame igual
+    if (!$mongoUri) throw new Exception("Falta MONGODB_URI");
 
     $mongoClient = new MongoDB\Client($mongoUri);
-    
-    // Especificamos la base de datos que mencionaste en tu cadena
-    $dbName = "estudiantes_db"; 
-    $mongoCollection = $mongoClient->selectDatabase($dbName)->selectCollection('estudiantes');
-    
-    // Prueba rápida de conexión
-    $mongoClient->listDatabases(); 
-
+    $mongoCollection = $mongoClient->selectDatabase("estudiantes_db")->selectCollection("estudiantes");
 } catch (Exception $e) {
-    // Esto te dirá exactamente qué falla: si es el DNS (SRV) o la contraseña
-    error_log("Error de conexión MongoDB: " . $e->getMessage());
-    $errorConexionMongo = $e->getMessage();
+    $errorMg = $e->getMessage();
 }
 
-// ... Resto de tu lógica de guardado (Postgres y Mongo) ...
+// 2. Conexión PostgreSQL (Render inyecta DATABASE_URL automáticamente)
+try {
+    $pgUri = getenv('DATABASE_URL');
+    $pdo = new PDO($pgUri);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch (Exception $e) {
+    $errorPg = $e->getMessage();
+}
+
+// 3. Procesar Formulario
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $nombre = $_POST['nom'] ?? '';
+    $telefono = $_POST['tel'] ?? '';
+    $detalles = $_POST['det'] ?? '';
+
+    // Guardar en Postgres
+    try {
+        if (isset($pdo)) {
+            $stmt = $pdo->prepare("INSERT INTO sugerencias (nombre, telefono, detalles) VALUES (?, ?, ?)");
+            $stmt->execute([$nombre, $telefono, $detalles]);
+            $statusPg = true;
+        }
+    } catch (Exception $e) { $mensaje .= "Error PG: " . $e->getMessage(); }
+
+    // Guardar en Mongo
+    try {
+        if (isset($mongoCollection)) {
+            $mongoCollection->insertOne(['nombre' => $nombre, 'tel' => $telefono, 'det' => $detalles]);
+            $statusMg = true;
+        }
+    } catch (Exception $e) { $mensaje .= " Error MG: " . $e->getMessage(); }
+
+    // Mensaje de éxito dual
+    if ($statusPg && $statusMg) $mensaje = "✅ Guardado en ambos soportes.";
+    else $mensaje = "⚠ Guardado parcial. PG: " . ($statusPg?'OK':'Fail') . " | MG: " . ($statusMg?'OK':'Fail');
+}
+
+// Mostrar resultado simple para evitar pantalla blanca
+echo "<h1>$mensaje</h1><a href='../index.html'>Volver</a>";
