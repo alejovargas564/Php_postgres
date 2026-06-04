@@ -18,7 +18,7 @@ COPY . /var/www/html/
 
 # Instalar dependencias PHP (MongoDB library)
 
-RUN cd /var/www/html && composer install --no-dev --optimize-autoloader || echo "COMPOSER FAILED"
+RUN cd /var/www/html && composer install --no-dev --optimize-autoloader 2>&1
 RUN chown -R www-data:www-data /var/www/html
 
 EXPOSE 80
