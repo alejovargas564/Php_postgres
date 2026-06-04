@@ -19,4 +19,6 @@ RUN cd /var/www/html && composer install --no-dev --optimize-autoloader --ignore
 
 RUN chown -R www-data:www-data /var/www/html
 
+RUN echo 'PassEnv MONGO_URI' >> /etc/apache2/apache2.conf
+
 EXPOSE 80
