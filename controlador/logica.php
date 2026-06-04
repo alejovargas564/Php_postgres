@@ -26,19 +26,20 @@ try {
     $mongo_uri = getenv('MONGO_URI');
     if ($mongo_uri) {
         try {
-            $mongo  = new MongoClient($mongo_uri);
-            $col    = $mongo->estudiantes_db->estudiantes;
-            $result = $col->insertOne([
-                'nombre'   => $nom,
-                'telefono' => $tel,
-                'detalles' => $det,
-                'fecha'    => new MongoDB\BSON\UTCDateTime(),
-            ]);
-            $mongo_id = (string) $result->getInsertedId();
-            $mongo_ok = true;
-        } catch (Exception $e) {
-            // Mongo falló, continuamos solo con Postgres
-        }
+    $mongo  = new MongoClient($mongo_uri);
+    $col    = $mongo->estudiantes_db->estudiantes;
+    $result = $col->insertOne([
+        'nombre'   => $nom,
+        'telefono' => $tel,
+        'detalles' => $det,
+        'fecha'    => new MongoDB\BSON\UTCDateTime(),
+    ]);
+    $mongo_id = (string) $result->getInsertedId();
+    $mongo_ok = true;
+} catch (Exception $e) {
+    $msg = '⚠ Mongo error: ' . $e->getMessage();
+    $color = 'red';
+}
     }
 
     // ── Insertar en PostgreSQL ────────────────────────────────
