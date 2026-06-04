@@ -24,6 +24,9 @@ try {
 
     // ── MongoDB Atlas ─────────────────────────────────────────
     $mongo_uri = getenv('MONGO_URI');
+    if (!$mongo_uri) {
+    die("ERROR: MONGO_URI está vacío");
+}
     if ($mongo_uri) {
         try {
     $mongo  = new MongoClient($mongo_uri);
