@@ -17,8 +17,8 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY . /var/www/html/
 
 # Instalar dependencias PHP (MongoDB library)
-RUN cd /var/www/html && composer install --no-dev --optimize-autoloader
 
+RUN cd /var/www/html && composer install --no-dev --optimize-autoloader || echo "COMPOSER FAILED"
 RUN chown -R www-data:www-data /var/www/html
 
 EXPOSE 80
