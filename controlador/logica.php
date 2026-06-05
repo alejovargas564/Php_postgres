@@ -39,20 +39,17 @@ try {
         throw new Exception("La variable MONGODB_URI no existe en Render.");
     }
     
-    // CONFIGURACIÓN CRUCIAL: Forzamos la desactivación del chequeo estricto de topología de red
+    // Opciones para forzar la conexión directa al nodo sin pasar por descubrimientos de red recursivos
     $options = [
-        'connectTimeoutMS' => 10000,
-        'serverSelectionTimeoutMS' => 10000,
-        'tls' => true,
-        'tlsAllowInvalidCertificates' => true // Evita bloqueos de certificados en el contenedor local
+        'connectTimeoutMS' => 8000,
+        'serverSelectionTimeoutMS' => 8000,
+        'directConnection' => true 
     ];
     
     $mongoClient = new MongoDB\Client($mongoUri, $options);
-    
-    // Seleccionar colección directamente sin listar bases de datos para evitar bloqueos de DNS preliminares
     $mongoCollection = $mongoClient->selectDatabase("estudiantes_db")->selectCollection("estudiantes");
     
-    // Forzar una operación ligera para validar si realmente conectó
+    // Validar conexión ejecutando una acción real
     $mongoCollection->findOne([]); 
     $statusMg = true;
 } catch (Exception $e) {
@@ -94,7 +91,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // --- 4. LEER REGISTROS PARA LAS TABLAS ---
-// Leer de PostgreSQL
 if (isset($pdo)) {
     try {
         $stmt = $pdo->query("SELECT id, nombre, telefono, detalles FROM sugerencias ORDER BY id DESC");
@@ -104,7 +100,6 @@ if (isset($pdo)) {
     }
 }
 
-// Leer de MongoDB
 if ($statusMg && isset($mongoCollection)) {
     try {
         $cursor = $mongoCollection->find([], ['limit' => 10, 'sort' => ['fecha' => -1]]);
