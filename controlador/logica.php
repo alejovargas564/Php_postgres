@@ -3,6 +3,10 @@
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
+// --- TRUCO MAESTRO: Forzar DNS de Google en el contenedor de Render ---
+// Esto soluciona el "Failed to look up SRV record" de raíz
+putenv("RES_OPTIONS=nameserver 8.8.8.8");
+
 require_once __DIR__ . '/../vendor/autoload.php';
 
 $mensaje = "";
@@ -39,22 +43,20 @@ try {
         throw new Exception("La variable MONGODB_URI no existe en Render.");
     }
     
-    // Opciones extremas para saltarnos bloqueos de red en Render
+    // Configuración estándar para SRV estable
     $options = [
         'connectTimeoutMS' => 10000,
-        'serverSelectionTimeoutMS' => 10000,
-        'tls' => true,
-        'tlsAllowInvalidCertificates' => true, // Evita fallos por resolución de nombres TLS
-        'directConnection' => true
+        'serverSelectionTimeoutMS' => 10000
     ];
     
     $mongoClient = new MongoDB\Client($mongoUri, $options);
     $mongoCollection = $mongoClient->selectDatabase("estudiantes_db")->selectCollection("estudiantes");
     
-    // Dejamos que intente la conexión sin bloquear el flujo inicial si el DNS de Render fluctúa
+    // Validar si responde
+    $mongoClient->listDatabases();
     $statusMg = true;
 } catch (Exception $e) {
-    $mensaje .= "❌ Error Inicialización MG: " . $e->getMessage() . "<br>";
+    $mensaje .= "❌ Error Conexión MG: " . $e->getMessage() . "<br>";
 }
 
 // --- 3. PROCESAR INSERCIÓN (SI VIENE POR POST) ---
@@ -87,8 +89,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $statusMg = true;
             } catch (Exception $e) {
                 $mensaje .= "❌ Error al Insertar MG: " . $e->getMessage() . "<br>";
-                // Si la inserción explota por red, marcamos desconectado
-                $statusMg = false; 
             }
         }
     }
@@ -133,7 +133,7 @@ if ($statusMg && isset($mongoCollection)) {
         <a href="../index.html" class="btn btn-outline-primary">← Volver al Formulario</a>
     </div>
 
-    <?php if (!empty($mensaje) && !$statusMg): ?>
+    <?php if (!empty($mensaje)): ?>
         <div class="alert alert-danger shadow-sm mb-4">
             <strong>Estado de las Conexiones:</strong><br>
             <div class="mt-2 small"><?php echo $mensaje; ?></div>
@@ -209,7 +209,7 @@ if ($statusMg && isset($mongoCollection)) {
                             <?php else: ?>
                                 <tr>
                                     <td colspan="4" class="text-center text-muted py-3">
-                                        <small><?php echo $statusMg ? 'Conectado. Esperando primer registro...' : 'Sincronizando con nodo IP directo...'; ?></small>
+                                        <small><?php echo $statusMg ? 'Conectado. Esperando primer registro...' : 'Esperando resolución externa de DNS...'; ?></small>
                                     </td>
                                 </tr>
                             <?php endif; ?>
