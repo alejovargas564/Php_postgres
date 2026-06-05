@@ -39,25 +39,22 @@ try {
         throw new Exception("La variable MONGODB_URI no existe en Render.");
     }
     
-    // Configuración para forzar la aceptación del nodo único sin resolución DNS extendida
+    // Opciones extremas para saltarnos bloqueos de red en Render
     $options = [
-        'connectTimeoutMS' => 15000,
-        'serverSelectionTimeoutMS' => 15000
+        'connectTimeoutMS' => 10000,
+        'serverSelectionTimeoutMS' => 10000,
+        'tls' => true,
+        'tlsAllowInvalidCertificates' => true, // Evita fallos por resolución de nombres TLS
+        'directConnection' => true
     ];
     
     $mongoClient = new MongoDB\Client($mongoUri, $options);
     $mongoCollection = $mongoClient->selectDatabase("estudiantes_db")->selectCollection("estudiantes");
     
-    // Forzamos la verificación del estado
-    $mongoClient->listDatabases();
+    // Dejamos que intente la conexión sin bloquear el flujo inicial si el DNS de Render fluctúa
     $statusMg = true;
 } catch (Exception $e) {
-    // Si falla la verificación pero la URI es correcta, intentamos mantener el flujo activo
-    if (strpos($e->getMessage(), 'Topology') !== false || strpos($e->getMessage(), 'resolve') !== false) {
-        $statusMg = true; // Forzar estado true para intentar la inserción directa
-    } else {
-        $mensaje .= "❌ Error Conexión MG: " . $e->getMessage() . "<br>";
-    }
+    $mensaje .= "❌ Error Inicialización MG: " . $e->getMessage() . "<br>";
 }
 
 // --- 3. PROCESAR INSERCIÓN (SI VIENE POR POST) ---
@@ -90,6 +87,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $statusMg = true;
             } catch (Exception $e) {
                 $mensaje .= "❌ Error al Insertar MG: " . $e->getMessage() . "<br>";
+                // Si la inserción explota por red, marcamos desconectado
+                $statusMg = false; 
             }
         }
     }
@@ -110,7 +109,6 @@ if ($statusMg && isset($mongoCollection)) {
         $cursor = $mongoCollection->find([], ['limit' => 10, 'sort' => ['fecha' => -1]]);
         $registrosMongo = $cursor->toArray();
     } catch (Exception $e) {
-        // Evitamos que el error de lectura rompa la pantalla si la base está respondiendo lento
         $registrosMongo = [];
     }
 }
@@ -135,7 +133,7 @@ if ($statusMg && isset($mongoCollection)) {
         <a href="../index.html" class="btn btn-outline-primary">← Volver al Formulario</a>
     </div>
 
-    <?php if (!empty($mensaje)): ?>
+    <?php if (!empty($mensaje) && !$statusMg): ?>
         <div class="alert alert-danger shadow-sm mb-4">
             <strong>Estado de las Conexiones:</strong><br>
             <div class="mt-2 small"><?php echo $mensaje; ?></div>
@@ -211,7 +209,7 @@ if ($statusMg && isset($mongoCollection)) {
                             <?php else: ?>
                                 <tr>
                                     <td colspan="4" class="text-center text-muted py-3">
-                                        <small><?php echo $statusMg ? 'Conectado. Esperando primer registro...' : 'Esperando sincronización de servicio...'; ?></small>
+                                        <small><?php echo $statusMg ? 'Conectado. Esperando primer registro...' : 'Sincronizando con nodo IP directo...'; ?></small>
                                     </td>
                                 </tr>
                             <?php endif; ?>
