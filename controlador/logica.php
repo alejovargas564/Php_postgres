@@ -18,6 +18,10 @@ try {
     
     // Convertir la URL de Render al formato DSN que exige el driver PDO de PHP
     $dbopts = parse_url($pgUri);
+    if (!$dbopts || !isset($dbopts["host"])) {
+        throw new Exception("El formato de DATABASE_URL es inválido.");
+    }
+    
     $dsn = "pgsql:host=" . $dbopts["host"] . ";port=" . ($dbopts["port"] ?? 5432) . ";dbname=" . ltrim($dbopts["path"], '/') . ";sslmode=require";
     
     $pdo = new PDO($dsn, $dbopts["user"], $dbopts["pass"]);
@@ -42,9 +46,9 @@ try {
 
 // --- 3. PROCESAR FORMULARIO ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $nombre = $_POST['nom'] ?? '';
-    $telefono = $_POST['tel'] ?? '';
-    $detalles = $_POST['det'] ?? '';
+    $nombre = isset($_POST['nom']) ? strip_tags(trim($_POST['nom'])) : '';
+    $telefono = isset($_POST['tel']) ? strip_tags(trim($_POST['tel'])) : '';
+    $detalles = isset($_POST['det']) ? strip_tags(trim($_POST['det'])) : '';
 
     // A. Guardar en Postgres
     if (isset($pdo)) {
