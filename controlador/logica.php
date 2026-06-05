@@ -1,5 +1,5 @@
 <?php
-// Reportar errores para debug (puedes quitar esto después)
+// Reportar errores para debug
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
@@ -15,7 +15,12 @@ try {
     if (!$pgUri) {
         throw new Exception("La variable DATABASE_URL no existe en Render.");
     }
-    $pdo = new PDO($pgUri);
+    
+    // Convertir la URL de Render al formato DSN que exige el driver PDO de PHP
+    $dbopts = parse_url($pgUri);
+    $dsn = "pgsql:host=" . $dbopts["host"] . ";port=" . ($dbopts["port"] ?? 5432) . ";dbname=" . ltrim($dbopts["path"], '/') . ";sslmode=require";
+    
+    $pdo = new PDO($dsn, $dbopts["user"], $dbopts["pass"]);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 } catch (Exception $e) {
     $mensaje .= "❌ Error Conexión PG: " . $e->getMessage() . "<br>";
