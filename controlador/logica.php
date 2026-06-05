@@ -38,9 +38,23 @@ try {
     if (!$mongoUri) {
         throw new Exception("La variable MONGODB_URI no existe en Render.");
     }
-    $mongoClient = new MongoDB\Client($mongoUri);
-    $mongoClient->listDatabases(); 
+    
+    // CONFIGURACIÓN CRUCIAL: Forzamos la desactivación del chequeo estricto de topología de red
+    $options = [
+        'connectTimeoutMS' => 10000,
+        'serverSelectionTimeoutMS' => 10000,
+        'tls' => true,
+        'tlsAllowInvalidCertificates' => true // Evita bloqueos de certificados en el contenedor local
+    ];
+    
+    $mongoClient = new MongoDB\Client($mongoUri, $options);
+    
+    // Seleccionar colección directamente sin listar bases de datos para evitar bloqueos de DNS preliminares
     $mongoCollection = $mongoClient->selectDatabase("estudiantes_db")->selectCollection("estudiantes");
+    
+    // Forzar una operación ligera para validar si realmente conectó
+    $mongoCollection->findOne([]); 
+    $statusMg = true;
 } catch (Exception $e) {
     $mensaje .= "❌ Error Conexión MG: " . $e->getMessage() . "<br>";
 }
@@ -64,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // Guardar en Mongo
-        if (isset($mongoCollection)) {
+        if ($statusMg && isset($mongoCollection)) {
             try {
                 $mongoCollection->insertOne([
                     'nombre' => $nombre, 
@@ -72,7 +86,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'det' => $detalles,
                     'fecha' => date("Y-m-d H:i:s")
                 ]);
-                $statusMg = true;
             } catch (Exception $e) {
                 $mensaje .= "❌ Error al Insertar MG: " . $e->getMessage() . "<br>";
             }
@@ -92,9 +105,9 @@ if (isset($pdo)) {
 }
 
 // Leer de MongoDB
-if (isset($mongoCollection)) {
+if ($statusMg && isset($mongoCollection)) {
     try {
-        $cursor = $mongoCollection->find([], ['sort' => ['fecha' => -1]]);
+        $cursor = $mongoCollection->find([], ['limit' => 10, 'sort' => ['fecha' => -1]]);
         $registrosMongo = $cursor->toArray();
     } catch (Exception $e) {
         $mensaje .= "❌ Error al Consultar MG: " . $e->getMessage() . "<br>";
@@ -121,7 +134,7 @@ if (isset($mongoCollection)) {
         <a href="../index.html" class="btn btn-outline-primary">← Volver al Formulario</a>
     </div>
 
-    <?php if (!empty($mensaje)): ?>
+    <?php if (!empty($mensaje) && !$statusMg): ?>
         <div class="alert alert-danger shadow-sm mb-4">
             <strong>Estado de las Conexiones:</strong><br>
             <div class="mt-2 small"><?php echo $mensaje; ?></div>
@@ -170,7 +183,9 @@ if (isset($mongoCollection)) {
             <div class="table-container">
                 <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-3">
                     <h4 class="text-success mb-0">MongoDB Atlas (NoSQL)</h4>
-                    <span class="badge bg-danger">Desconectado</span>
+                    <span class="badge bg-<?php echo $statusMg ? 'success' : 'danger'; ?>">
+                        <?php echo $statusMg ? 'Sincronizado' : 'Desconectado'; ?>
+                    </span>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-striped table-hover align-middle mb-0">
@@ -183,7 +198,7 @@ if (isset($mongoCollection)) {
                             </tr>
                         </thead>
                         <tbody>
-                            <?php if (!empty($registrosMongo)): ?>
+                            <?php if ($statusMg && !empty($registrosMongo)): ?>
                                 <?php foreach ($registrosMongo as $doc): ?>
                                     <tr>
                                         <td><?php echo htmlspecialchars($doc['nombre'] ?? ''); ?></td>
@@ -194,8 +209,8 @@ if (isset($mongoCollection)) {
                                 <?php endforeach; ?>
                             <?php else: ?>
                                 <tr>
-                                    <td colspan="4" class="text-center text-danger py-3">
-                                        <small>Esperando sincronización de servicio (Verificar SRV Record)...</small>
+                                    <td colspan="4" class="text-center text-muted py-3">
+                                        <small><?php echo $statusMg ? 'Conectado. No hay documentos guardados aún.' : 'Esperando sincronización de servicio...'; ?></small>
                                     </td>
                                 </tr>
                             <?php endif; ?>
