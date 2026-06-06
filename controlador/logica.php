@@ -50,7 +50,7 @@ try {
     ];
     
     $mongoClient = new MongoDB\Client($mongoUri, $options);
-    $mongoCollection = $mongoClient->selectDatabase("estudiantes_db")->selectCollection("estudiantes");
+    $mongoCollection = $mongoClient->selectDatabase("estudiantes-db")->selectCollection("estudiantes");
     
     // Validar si responde
     $mongoClient->listDatabases();
